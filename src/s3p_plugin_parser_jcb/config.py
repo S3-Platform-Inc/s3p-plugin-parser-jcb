@@ -16,9 +16,9 @@ from s3p_sdk.module import (
 
 config = PluginConfig(
     plugin=CoreConfig(
-        reference='my-template-source',         # уникальное имя источника
+        reference='jcb',         # уникальное имя источника
         type=SOURCE,                            # Тип источника (SOURCE, ML, PIPELINE)
-        files=['template_payload.py', ],        # Список файлов, которые будут использоваться в плагине (эти файлы будут сохраняться в платформе)
+        files=['jcb.py', ],        # Список файлов, которые будут использоваться в плагине (эти файлы будут сохраняться в платформе)
         is_localstorage=False
     ),
     task=TaskConfig(
@@ -38,8 +38,8 @@ config = PluginConfig(
         bus=None,
     ),
     payload=payload.PayloadConfig(
-        file='template_payload.py',                 # python файл плагина (точка входа). Этот файл должен быть указан в `plugin.files[*]`
-        classname='MyTemplateParser',               # имя python класса в указанном файле
+        file='jcb.py',                 # python файл плагина (точка входа). Этот файл должен быть указан в `plugin.files[*]`
+        classname='JCB',               # имя python класса в указанном файле
         entry=payload.entry.EntryConfig(
             method='content',
             params=[
