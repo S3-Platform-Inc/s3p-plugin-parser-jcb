@@ -2,8 +2,8 @@ from typing import Type
 
 import pytest
 
-# TODO: Указать путь до класса плагина
-from s3_platform_plugin_template.template_payload import MyTemplateParser as imported_payload_class
+
+from src.s3p_plugin_parser_jcb.jcb import JCB as imported_payload_class
 
 
 @pytest.fixture(scope="module")
