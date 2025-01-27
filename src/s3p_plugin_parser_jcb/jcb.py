@@ -1,15 +1,18 @@
 import datetime
 import time
 
+from s3p_sdk.exceptions.parser import S3PPluginParserOutOfRestrictionException, S3PPluginParserFinish
 from s3p_sdk.plugin.payloads.parsers import S3PParserBase
-from s3p_sdk.types import S3PRefer, S3PDocument, S3PPlugin
+from s3p_sdk.types import S3PRefer, S3PDocument, S3PPlugin, S3PPluginRestrictions
 from selenium.common import NoSuchElementException
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
-
+from s3p_sdk.types.plugin_restrictions import FROM_DATE
+import dateutil
 import re
+
 
 class JCB(S3PParserBase):
     """
@@ -19,10 +22,9 @@ class JCB(S3PParserBase):
     YEAR_BEGIN = 2023
     HOME_URL = 'https://www.global.jcb/en/press/index.html'
     TEMPLATE_URL = 'https://www.global.jcb/en/press/index.html?year={year}'
-    
-    def __init__(self, refer: S3PRefer, plugin: S3PPlugin, web_driver: WebDriver, max_count_documents: int = None,
-                 last_document: S3PDocument = None):
-        super().__init__(refer, plugin, max_count_documents, last_document)
+
+    def __init__(self, refer: S3PRefer, plugin: S3PPlugin, restrictions: S3PPluginRestrictions, web_driver: WebDriver):
+        super().__init__(refer, plugin, restrictions)
 
         # Тут должны быть инициализированы свойства, характерные для этого парсера. Например: WebDriver
         self._driver = web_driver
@@ -52,27 +54,28 @@ class JCB(S3PParserBase):
             time.sleep(3)
             self._agree_cookie_pass()
             news_list = self._driver.find_elements(By.XPATH,
-                                                  '//*[@id="press"]/div[1]/div[1]/div/ul/li')  # список новостей за год
+                                                   '//*[@id="press"]/div[1]/div[1]/div/ul/li')  # список новостей за год
 
             for news in news_list:
                 news_href = news.find_element(By.CLASS_NAME, 'news_href').get_attribute(
                     'href')  # ссылка на страницу новости
                 news_hrefs.append(news_href)
 
-        count = 0
         for url in news_hrefs:
-            if count >= self.max_count_documents:
-                self.logger.debug(f'Max count documents reached ({self.max_count_documents})')
-                break
             try:
                 document = self._parse_news_page(url)  # парсинг страницы новости
-                self._content_document.append(document)
-                self.logger.info(self._find_document_text_for_logger(document))
-                count += 1
             except Exception as e:
                 # При ошибке парсинга новости, парсер продолжает свою работу
                 self.logger.debug(f'news by link:{url} done parse with error {e}')
-        # ---
+            else:
+                try:
+                    self._find(document)
+                except S3PPluginParserOutOfRestrictionException as e:
+                    if e.restriction == FROM_DATE:
+                        self.logger.debug(f'Document is out of date range `{self._restriction.from_date}`')
+                        raise S3PPluginParserFinish(self._plugin,
+                                                    f'Document is out of date range `{self._restriction.from_date}`', e)
+            # ---
         # ========================================
 
     def _years_for_parsing(self) -> list[int]:
@@ -86,7 +89,7 @@ class JCB(S3PParserBase):
         time.sleep(3)
         self._agree_cookie_pass()
         _year_list_elements = self._driver.find_elements(By.XPATH,
-                                                        '//*[@id="news-category"]/div[1]/ul/li')  # бар с выбором года публикации
+                                                         '//*[@id="news-category"]/div[1]/ul/li')  # бар с выбором года публикации
         for _year_el in _year_list_elements:
             innerText = _year_el.find_element(By.TAG_NAME, 'a').get_attribute(
                 'innerText')  # выбор елемента с годом публикации
@@ -118,11 +121,13 @@ class JCB(S3PParserBase):
 
         try:  # Парсинг даты публикации. Обязательная информация
             # _pub_date_text: str = self._driver.find_element(By.XPATH,'//*[@id="press"]/div[1]/div/div/div[2]/div/div/p/span[contains(class, "news-list--date")]').get_attribute('innerText')
-            _pub_date_text: str = WebDriverWait(self._driver, 3).until(ec.presence_of_element_located((By.CLASS_NAME, 'news-list--date'))).get_attribute("innerText")
+            _pub_date_text: str = WebDriverWait(self._driver, 3).until(
+                ec.presence_of_element_located((By.CLASS_NAME, 'news-list--date'))).get_attribute("innerText")
             _pub_date: datetime.datetime = dateutil.parser.parse(_pub_date_text)
-            _document.pub_date = _pub_date
+            _document.published = _pub_date
         except Exception as e:
-            self.logger.error(f'Page {self._driver.current_url} do not contain a publication date of news. Throw error: {e}')
+            self.logger.error(
+                f'Page {self._driver.current_url} do not contain a publication date of news. Throw error: {e}')
             raise e
 
         try:  # Категория новости
@@ -131,7 +136,7 @@ class JCB(S3PParserBase):
             #     'innerText')
             _category_text: str = WebDriverWait(self._driver, 3).until(
                 ec.presence_of_element_located((By.CLASS_NAME, 'news-list--category'))).get_attribute("innerText")
-            _document.other_data['category'] = _category_text
+            _document.other['category'] = _category_text
         except Exception as e:
             self.logger.error(f'Page {self._driver.current_url} do not contain a category of news. Throw error: {e}')
 
@@ -155,7 +160,8 @@ class JCB(S3PParserBase):
             self.logger.error(f'Page {self._driver.current_url} do not contain a abstract of news. Throw error: {e}')
 
         try:  # Text новости
-            _text = WebDriverWait(self._driver, 3).until(ec.presence_of_element_located((By.XPATH, '//*[@id="press"]/div[1]/div/div/div[2]/div/div/div'))).get_attribute("innerText")
+            _text = WebDriverWait(self._driver, 3).until(ec.presence_of_element_located(
+                (By.XPATH, '//*[@id="press"]/div[1]/div/div/div[2]/div/div/div'))).get_attribute("innerText")
             _document.text = _text
         except Exception as e:
             self.logger.error(f'Page {self._driver.current_url}. Error parse main text of news. Throw error: {e}')
