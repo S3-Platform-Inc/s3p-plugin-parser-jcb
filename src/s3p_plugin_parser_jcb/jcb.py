@@ -19,10 +19,9 @@ class JCB(S3PParserBase):
     YEAR_BEGIN = 2023
     HOME_URL = 'https://www.global.jcb/en/press/index.html'
     TEMPLATE_URL = 'https://www.global.jcb/en/press/index.html?year={year}'
-    
-    def __init__(self, refer: S3PRefer, plugin: S3PPlugin, web_driver: WebDriver, max_count_documents: int = None,
-                 last_document: S3PDocument = None):
-        super().__init__(refer, plugin, max_count_documents, last_document)
+
+    def __init__(self, refer: S3PRefer, plugin: S3PPlugin, restrictions: S3PPluginRestrictions, web_driver: WebDriver):
+        super().__init__(refer, plugin, restrictions)
 
         # Тут должны быть инициализированы свойства, характерные для этого парсера. Например: WebDriver
         self._driver = web_driver
@@ -59,16 +58,11 @@ class JCB(S3PParserBase):
                     'href')  # ссылка на страницу новости
                 news_hrefs.append(news_href)
 
-        count = 0
+
         for url in news_hrefs:
-            if count >= self.max_count_documents:
-                self.logger.debug(f'Max count documents reached ({self.max_count_documents})')
-                break
             try:
                 document = self._parse_news_page(url)  # парсинг страницы новости
-                self._content_document.append(document)
-                self.logger.info(self._find_document_text_for_logger(document))
-                count += 1
+                self._find(document)
             except Exception as e:
                 # При ошибке парсинга новости, парсер продолжает свою работу
                 self.logger.debug(f'news by link:{url} done parse with error {e}')
@@ -120,7 +114,7 @@ class JCB(S3PParserBase):
             # _pub_date_text: str = self._driver.find_element(By.XPATH,'//*[@id="press"]/div[1]/div/div/div[2]/div/div/p/span[contains(class, "news-list--date")]').get_attribute('innerText')
             _pub_date_text: str = WebDriverWait(self._driver, 3).until(ec.presence_of_element_located((By.CLASS_NAME, 'news-list--date'))).get_attribute("innerText")
             _pub_date: datetime.datetime = dateutil.parser.parse(_pub_date_text)
-            _document.pub_date = _pub_date
+            _document.published = _pub_date
         except Exception as e:
             self.logger.error(f'Page {self._driver.current_url} do not contain a publication date of news. Throw error: {e}')
             raise e
@@ -131,7 +125,7 @@ class JCB(S3PParserBase):
             #     'innerText')
             _category_text: str = WebDriverWait(self._driver, 3).until(
                 ec.presence_of_element_located((By.CLASS_NAME, 'news-list--category'))).get_attribute("innerText")
-            _document.other_data['category'] = _category_text
+            _document.other['category'] = _category_text
         except Exception as e:
             self.logger.error(f'Page {self._driver.current_url} do not contain a category of news. Throw error: {e}')
 

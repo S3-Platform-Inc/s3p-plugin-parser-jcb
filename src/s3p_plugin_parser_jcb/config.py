@@ -7,7 +7,7 @@ from s3p_sdk.plugin.config import (
     trigger,
     MiddlewareConfig,
     modules,
-    payload
+    payload, RestrictionsConfig
 )
 from s3p_sdk.plugin.types import SOURCE
 from s3p_sdk.module import (
@@ -19,7 +19,13 @@ config = PluginConfig(
         reference='jcb',         # уникальное имя источника
         type=SOURCE,                            # Тип источника (SOURCE, ML, PIPELINE)
         files=['jcb.py', ],        # Список файлов, которые будут использоваться в плагине (эти файлы будут сохраняться в платформе)
-        is_localstorage=False
+        is_localstorage=False,
+        restrictions=RestrictionsConfig(
+            maximum_materials=50,
+            to_last_material=None,
+            from_date=None,
+            to_date=None,
+        )
     ),
     task=TaskConfig(
         trigger=trigger.TriggerConfig(
@@ -42,8 +48,6 @@ config = PluginConfig(
             method='content',
             params=[
                 payload.entry.ModuleParamConfig(key='web_driver', module_name=WebDriver, bus=True),
-                payload.entry.ConstParamConfig(key='max_count_documents', value=50),
-
             ]
         )
     )
