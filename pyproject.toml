@@ -8,6 +8,7 @@ readme = "readme.md"
 [tool.poetry.dependencies]
 python = "^3.11"
 s3p-sdk = "0.2.10"
+python-dateutil = "^2.9.0.post0"
 
 
 [tool.poetry.group.test.dependencies]
